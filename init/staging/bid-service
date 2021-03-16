@@ -1,0 +1,72 @@
+#!/bin/bash
+# chkconfig: 2345 95 20
+# description: Bid service server
+# processname: bid-service
+. /etc/init.d/functions
+
+NAME=bid-service
+SOURCE_DIR=/var/www/api/bid-service/
+SOURCE_FILE=server.js
+APP=$SOURCE_DIR$SOURCE_FILE
+ARGS=-w2
+
+user=svc_bid10
+pidfile=/var/run/$NAME.pid
+logfile=/var/log/$NAME-forever.log
+forever_dir=/var/run/forever
+
+forever=forever
+sed=sed
+
+start() {
+  touch $logfile
+  chown $user $logfile
+
+  touch $pidfile
+  chown $user $pidfile
+
+  su - $user -c "DD_ENV='dev' DD_LOGS_INJECTION=true DD_TRACE_SAMPLE_RATE='1' NODE_ENV=STAGING $forever start -p $forever_dir --pidFile $pidfile -l $logfile -a -d $APP $ARGS 2>&1 >/dev/null"
+  ret=$?
+
+  if [ $ret -eq 0 ]; then
+    action $"Starting ${NAME}: " /bin/true
+  else
+    action $"Starting ${NAME}: " /bin/false
+  fi
+
+  return $ret
+}
+
+stop() {
+  su - $user -c "$forever stop -p $forever_dir $APP 2>&1 >/dev/null"
+  ret=$?
+
+  if [ $ret -eq 0 ]; then
+    action $"Stopping ${NAME}: " /bin/true
+  else
+    action $"Stopping ${NAME}: " /bin/false
+  fi
+
+  return $ret
+}
+
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart)
+    stop
+    start
+    ;;
+  status)
+    status -p ${pidfile}
+    ;;
+  *)
+    echo "Usage: {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
+exit $RETVAL

@@ -1,0 +1,81 @@
+const _ = require('lodash');
+const assert = require('assert');
+const { getItemInfo, validateBidData, insertBidDB } = require('../lib/results');
+const http = require('http');
+const { orm, Sequelize } = require('../../common/models/orm');
+
+for (let i = 0; i < process.env.NUMBER_OF_CASES; i++) {
+    describe('Get random data from database', () => {
+        let results;
+        let resp;
+        before(function(done) {
+            const sql = `SELECT auction, item FROM tblInventory WHERE dateCreated > '2020-10-01' AND closed = 0 ORDER BY RAND() LIMIT 1`;
+            orm.query(sql, { type: Sequelize.QueryTypes.RAW }).then((res) => {
+                results = res[0][0];
+                done();
+            });
+        });
+
+        before(function(done) {
+            http.get(`http://192.168.0.210:7070/workspace/${ results.auction }/item/${ results.item }/current`, (res) => {
+                res.setEncoding('utf8');
+                let rawData = '';
+                res.on('data', (chunk) => { rawData += chunk; });
+                res.on('end', () => {
+                    try {
+                        resp = JSON.parse(rawData);
+                        done();
+                    } catch (e) {
+                        throw(e);
+                    }
+                });
+            });
+        });
+
+        it('tests the local item data function', function(done) {
+            getItemInfo(results.item, results.auction).then(function(itemResp) {
+                assert.deepStrictEqual(resp, itemResp.itemInfo, `${ results.auction }-${ results.item }`);
+                done();
+            }).catch(function(err) {
+                done(err);
+            });
+        });
+    });
+}
+
+for (let i = 0; i < process.env.NUMBER_OF_CASES; i++) {
+    describe('Get random data from database', () => {
+        let itemUT;
+        before(function(done){
+            //get random item to results on
+            const sql = `SELECT auction, item FROM tblInventory WHERE dateCreated > '2020-10-01' AND closed = 0 AND halted = 0 ORDER BY RAND() LIMIT 1`;
+            orm.query(sql, { type: Sequelize.QueryTypes.SELECT }).then((res) => {
+                itemUT = res[0];
+                done();
+            });
+        })
+        it('creates a new results and inserts to the database', function(done){
+            let theTime = new Date();
+            let bidObj = {
+                item: itemUT.item,
+                auction: itemUT.auction,
+                customer: 161913,
+                current: 10000,
+                maximum: 69420,
+                ip: 0,
+                date: theTime
+            }
+            insertBidDB(bidObj)
+                .then(res => {
+                    let bidQ = `SELECT * FROM tblGlobalEntries WHERE item = :item and auction = :auction and customer = :customer ORDER BY date DESC LIMIT 1;`;
+                    orm.query(bidQ,{replacements:bidObj, type:orm.QueryTypes.SELECT})
+                        .then(bidRes => {
+                            assert.deepStrictEqual(_.omit(bidObj, ['date']), _.pick(bidRes[0], ['item', 'auction', 'customer', 'current', 'maximum', 'ip']));
+                            done();
+                        }).catch(function(err) {
+                            done(err);
+                        });
+                })
+        })
+    })
+}

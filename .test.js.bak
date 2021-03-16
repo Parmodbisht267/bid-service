@@ -1,0 +1,21 @@
+const fs = require('fs');
+const https = require('https');
+const chroma = require('chroma-js');
+const path = require('path');
+const cov = require(path.resolve(__dirname, './coverage/coverage-summary.json'));
+
+const saveImageToDisk = (url) => {
+    const file = fs.createWriteStream(path.resolve(__dirname, './coverage.png'));
+    https.get(url, (response) => {
+        response.pipe(file);
+    });
+};
+
+const color = chroma.scale(['#A80000', '#F2EA00', '#00AD08']).domain([0, 75, 100])(cov.total.lines.pct).hex().substr(1, 6);
+fs.unlink(path.resolve(__dirname, './coverage.png'), (err) => {
+    if (err) {
+        console.error(err);
+    }
+});
+
+saveImageToDisk(`https://raster.shields.io/badge/coverage-${ cov.total.lines.pct }%25-${ color }.png`);
